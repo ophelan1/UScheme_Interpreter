@@ -5,6 +5,7 @@
 #include <stack>
 #include <string>
 #include <unistd.h>
+#include <cctype>
 
 using namespace std;
 
@@ -26,18 +27,87 @@ struct Node {
     friend ostream &operator<<(ostream &os, const Node &n);
 };
 
+Node::Node(string v, Node *l, Node *r): value(v), left(l), right(r){
+}
+
+Node::~Node(){
+    
+}
+
 ostream &operator<<(ostream &os, const Node &n) {
+    // print current node
+    cout << "(Node: value=" << n.value;
+
+
+    // recursively call on left child
+    if(n.left){
+        cout << ", left=" << *(n.left);
+    }
+
+    // recursively call on right child
+    if(n.right){
+        cout << ", right=" << *(n.right);
+    }
+
+    cout << ")";
     return os;
 }
 
 // Parser ----------------------------------------------------------------------
 
 string parse_token(istream &s) {
-    string token;
+    string token="";
+    char c1;
+
+    // removes whitespace
+    c1=s.peek();
+    while( isspace(c1) ){
+        c1=s.get();
+        c1=s.peek();
+    }
+
+    int ascii_c1=(int)c1;
+    // check if parathenses or operator
+    if( c1=='(' || c1==')' || c1=='+' || c1=='-' || c1=='*' || c1=='/' ){
+        token=s.get();
+    }// check if chracter is a digit
+    else if( (ascii_c1>=48) && (ascii_c1<58) ){
+        c1=s.get();
+        token+=c1;
+        c1=s.peek();
+        ascii_c1=(int)c1;
+        while( (ascii_c1>=48) && (ascii_c1<58) ){
+                c1=s.get();
+                token+=c1;
+                c1=s.peek();
+                ascii_c1=(int)c1;
+        }
+    }
+
     return token;
 }
 
 Node *parse_expression(istream &s) {
+    string token = parse_token(s);
+
+    Node* left=nullptr;
+    Node* right=nullptr;
+   
+    if((token=="") || (token==")")){
+        return nullptr;
+    }
+
+    if(token=="("){
+        token = parse_token(s);
+        left  = parse_expression(s);
+        if(left){
+            right = parse_expression(s);
+        }
+        if(right){
+            parse_token(s);
+        }
+    }
+
     return new Node(token, left, right);
 }
 

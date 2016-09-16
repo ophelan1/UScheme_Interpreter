@@ -6,17 +6,23 @@
 #include <string>
 #include <unistd.h>
 #include <cctype>
+#include <regex>
+#include <list> 
 
 using namespace std;
 
 // Globals ---------------------------------------------------------------------
-
+regex num_type("[[:digit:]]+");
+regex op_type ("(\\+|-|\\*|/)");
 bool BATCH = false;
 bool DEBUG = false;
 
 // Structures ------------------------------------------------------------------
 
+
+//##################     NODE STRUCTURE      #############################
 struct Node {
+
     Node(string value, Node *left=nullptr, Node *right=nullptr);
     ~Node();
 
@@ -27,104 +33,131 @@ struct Node {
     friend ostream &operator<<(ostream &os, const Node &n);
 };
 
-Node::Node(string v, Node *l, Node *r): value(v), left(l), right(r){
-}
-
-Node::~Node(){
-    
-}
+Node::Node(string v, Node *l, Node *r): value(v), left(l), right(r){}
+Node::~Node(){}
 
 ostream &operator<<(ostream &os, const Node &n) {
     // print current node
-    cout << "(Node: value=" << n.value;
-
+    cout << "(Node: value = " << n.value;
 
     // recursively call on left child
     if(n.left){
-        cout << ", left=" << *(n.left);
-    }
+        cout << ", left = " << *(n.left);}
 
     // recursively call on right child
     if(n.right){
-        cout << ", right=" << *(n.right);
-    }
+        cout << ", right = " << *(n.right);}
 
     cout << ")";
     return os;
 }
 
-// Parser ----------------------------------------------------------------------
+// Creates Tree ----------------------------------------------------------------
+class tree
+{
+    public:
+        tree(string root_val = NULL);
 
-string parse_token(istream &s) {
-    string token="";
-    char c1;
+        void destroy_tree(Node *leaf);
+        ~tree();
+        
+        void assemble(list<string>*, Node*);
+        void evaluate(Node*);
+        Node* get_root();
 
-    // removes whitespace
-    c1=s.peek();
-    while( isspace(c1) ){
-        c1=s.get();
-        c1=s.peek();
-    }
+    private:    
+        Node *root;
+};
 
-    int ascii_c1=(int)c1;
-    // check if parathenses or operator
-    if( c1=='(' || c1==')' || c1=='+' || c1=='-' || c1=='*' || c1=='/' ){
-        token=s.get();
-    }// check if chracter is a digit
-    else if( (ascii_c1>=48) && (ascii_c1<58) ){
-        c1=s.get();
-        token+=c1;
-        c1=s.peek();
-        ascii_c1=(int)c1;
-        while( (ascii_c1>=48) && (ascii_c1<58) ){
-                c1=s.get();
-                token+=c1;
-                c1=s.peek();
-                ascii_c1=(int)c1;
+//This value is set to NULL if there are no items in the input list
+tree::tree(string root_val){
+    root = new Node(root_val);
+}
+
+
+//The destructor calls the function "destroy tree" recursively until all the leaves are freed
+tree::~tree(){
+    destroy_tree(root);}
+
+/*Would be faster to include the leaf!=NULL condition in each of the 
+function calls, thereby calling it twice. Only other option is to call both functions and load them into memory, only
+to find that the pointers they have been passed as arguments are NULL. Means waiting for the functions to return*/
+void tree::destroy_tree(Node *leaf){
+  if(leaf!=NULL){
+    destroy_tree(leaf->left);
+    destroy_tree(leaf->right);
+    delete leaf;
+  }
+}
+
+Node* tree::get_root(){
+    return(root);}
+
+
+//This function sets up the entire tree, given a list of the numbers and operands
+void tree::assemble(list<string> *vals, Node *leaf){
+    string next = vals -> front();
+        //If value in the node is an operator, call recursively on the next 2 numbers
+        if( (regex_match(leaf->value, op_type) ) && ( next != "" ) ){
+            if(leaf->left == NULL){
+                leaf->left=new Node(vals -> front());
+                vals -> pop_front();
+                assemble(vals, leaf->left);
+            }
+            if(leaf->right == NULL){
+                leaf->right=new Node(vals -> front());
+                vals -> pop_front();
+                assemble(vals, leaf->right);
+            }
         }
-    }
-
-    return token;
 }
 
-Node *parse_expression(istream &s) {
-    string token = parse_token(s);
 
-    Node* left=nullptr;
-    Node* right=nullptr;
-   
-    if((token=="") || (token==")")){
-        return nullptr;
-    }
 
-    if(token=="("){
-        token = parse_token(s);
-        left  = parse_expression(s);
-        if(left){
-            right = parse_expression(s);
+
+void tree::evaluate(Node *leaf) {
+    if(!( leaf -> left == NULL ) && !( leaf -> right == NULL)){
+        //First check the left side, then the right side, to see if there is an operator. Call recursively if so
+        if( regex_match(leaf->left->value, op_type) ){
+            evaluate(leaf->left);
         }
-        if(right){
-            parse_token(s);
+        if( regex_match(leaf->right->value, op_type) ){
+            evaluate(leaf->right);
         }
+
+        //By the time the recursive calls come back, both the left and right should be ints
+        int left_val = stoi(leaf->left->value);
+        int right_val = stoi(leaf->right->value);
+        int product;
+
+        //When evaluating an "OP-node", switch the value of the operation string to find correct product. 
+        switch(leaf->value[0]){
+            case '+':
+                product = left_val + right_val;
+                break;
+            case '-':
+                product = left_val - right_val;
+                break;
+            case '*':
+                product = left_val * right_val;
+                break;
+            case '/':
+                product = left_val / right_val;
+                break;
+        }   
+        leaf -> value =  to_string(product);
     }
 
-    return new Node(token, left, right);
 }
 
-// Interpreter -----------------------------------------------------------------
-
-void evaluate_r(const Node *n, stack<int> &s) {
-}
-
-int evaluate(const Node *n) {
-    return 0;
-}
 
 // Main execution --------------------------------------------------------------
 
 int main(int argc, char *argv[]) {
-    string line;
     int c;
+    string line, token, first;
+    list<string> inputs;
+    tree *mathTree; 
 
     while ((c = getopt(argc, argv, "bdh")) != -1) {
         switch (c) {
@@ -144,19 +177,36 @@ int main(int argc, char *argv[]) {
             cout.flush();
         }
 
-        if (!getline(cin, line)) {
-            break;
+        // Read the first line of input into "line"
+        if (!getline(cin, line)) {break;}
+        if (DEBUG) { cout << "Original Line: " << line << endl; }
+
+        size_t found = line.find_first_of("()");
+
+        while (found!=string::npos){
+            line.erase(found,1);
+            found=line.find_first_of("()",found);
         }
 
-        if (DEBUG) { cout << "LINE: " << line << endl; }
 
+        // Stream "words" one at a time, if they match either of the REGEX, they are pushed into the list 
         stringstream s(line);
-        Node *n = parse_expression(s);
-        if (DEBUG) { cout << "TREE: " << *n << endl; }
+        while(s >> token){
+            if(regex_match(token,num_type) || regex_match(token,op_type)){
+                inputs.push_back(token);
+            }
+        }
 
-        cout << evaluate(n) << endl;
 
-        delete n;
+        mathTree = new tree(inputs.front());
+        inputs.pop_front();
+        if(inputs.front() != ""){
+            mathTree -> assemble(&inputs, mathTree -> get_root());
+        }
+        mathTree -> evaluate(mathTree -> get_root());
+        cout << mathTree -> get_root()->value << endl;
+        delete mathTree;
+
     }
 
     return 0;
